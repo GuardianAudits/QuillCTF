@@ -164,7 +164,7 @@ contract TicTacToe {
             let col2 := add(row0, 0xa0)
             let d0 := add(row0, 0xc0)
             let d1 := add(row0, 0xe0)
-            mstore(0x40, add(row0, 0x160))
+            mstore(0x40, add(row0, 0x100))
             // We employ the 3x3 magic square to determine the winner
             // https://en.wikipedia.org/wiki/Magic_square
             for { let i := 0 } lt(i, 0x9) { i := add(i, 0x1) } {
