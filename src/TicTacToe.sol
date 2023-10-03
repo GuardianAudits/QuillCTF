@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "forge-std/Test.sol";
-
 contract TicTacToe {
     
     error Blacklisted(address blacklistedAddress);
@@ -149,23 +147,16 @@ contract TicTacToe {
             // We employ the 3x3 magic square to determine the winner
             // https://en.wikipedia.org/wiki/Magic_square
             for { let i := 0 } lt(i, 0x9) { i := add(i, 0x1) } {
+                // Distraction?
                 let squareValue := and(shr(sub(0xf8, mul(0x8, i)), magicSquare), 0xff)
                 let tile := mload(add(mload(game), add(0x60, mul(i, 0x20))))
                 let factor
                 switch tile
                 case 1 { 
                     factor := 1
-                    // playerOneSum := add(playerOneSum, squareValue) 
-                    // if eq(playerOneSum, 15) {
-                    //     sstore(winnerSlot, mload(add(game, 0x20)))
-                    // }
                 }
                 case 2 { 
                     factor := sub(0, 1)
-                    // playerTwoSum := add(playerTwoSum, squareValue)
-                    // if eq(playerTwoSum, 15) {
-                    //     sstore(winnerSlot, mload(add(game, 0x40)))
-                    // }
                 }
                 default {
                     factor := 0
@@ -182,6 +173,7 @@ contract TicTacToe {
                 case 2 {
                     mstore(row2, add(mload(row2), mul(squareValue, factor)))
                 }
+                // Hidden in plain sight
                 if lt(i, 3) { mstore(col0, add(mload(col0), mul(squareValue, factor))) }
                 if and(gt(i, 2), lt(i, 6)) { mstore(col2, add(mload(col2), mul(squareValue, factor))) }
                 if gt(i, 5) { mstore(col2, add(mload(col2), mul(squareValue, factor))) }
@@ -192,6 +184,7 @@ contract TicTacToe {
                 if and(not(iszero(value)), eq(smod(value, 15), 0)) {
                     switch iszero(and(value, shl(1, 255)))
                     case 0 {
+                        // You're looking in the wrong place
                         sstore(winnerSlot, mload(add(game, 0x20)))
                     }
                     case 1 {
