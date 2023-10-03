@@ -15,10 +15,13 @@ contract TicTacToe {
 
     mapping(uint256 => Game) internal games;
     mapping(address => bool) public blacklist;
+    mapping(address => uint256) public claimable;
 
     uint256 public gameNonce;
+    address public immutable owner;
     bytes9 constant public magicSquare = 0x020904070503060108;
     uint256 constant public MIN_STAKE = 1 ether;
+    uint256 constant public MAX_STAKE = 3 ether;
 
     enum Tile {
         Empty,
@@ -43,6 +46,15 @@ contract TicTacToe {
         uint256 col;
     }
 
+    constructor() {
+        owner = msg.sender;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "not owner");
+        _;
+    }
+
     modifier validateGame(address _playerTwo) {
         if (blacklist[msg.sender]) revert Blacklisted(msg.sender);
         if (blacklist[_playerTwo]) revert Blacklisted(_playerTwo);
@@ -61,7 +73,10 @@ contract TicTacToe {
         if (game.moveNonce & 1 == 0 && msg.sender != game.playerOne) revert NotPlayerOne();
         if (game.moveNonce & 1 == 1 && msg.sender != game.playerTwo) revert NotPlayerTwo();
 
-        if (msg.value + (game.moveNonce & 1 == 0 ? game.playerOneStake : game.playerTwoStake) < (game.moveNonce & 1 == 0 ? game.playerTwoStake : game.playerOneStake)) {
+        uint256 newStake = msg.value + (game.moveNonce & 1 == 0 ? game.playerOneStake : game.playerTwoStake);
+        require(newStake <= MAX_STAKE, "gt MAX_STAKE");
+
+        if (newStake < (game.moveNonce & 1 == 0 ? game.playerTwoStake : game.playerOneStake)) {
             revert NotEnoughStake();
         }
 
@@ -81,29 +96,33 @@ contract TicTacToe {
         return game.winner != address(0) || game.moveNonce == 9;
     }
 
+    function blacklistAddress(address _addr, bool isBlacklisted) external onlyOwner {
+        blacklist[_addr] = isBlacklisted;
+    }
+
     function settleGame(uint256 _gameId) external {
         if (!gameOver(_gameId)) revert GameNotOver();
 
         Game memory game = games[_gameId];
         delete games[_gameId];
-
-        bool success;
-
         if (game.winner != address(0)) {
-            uint256 totalStake = game.playerOneStake + game.playerTwoStake;
-            (success, ) = payable(game.winner).call{value: totalStake}(""); 
-            require(success);
+            claimable[game.winner] += game.playerOneStake + game.playerTwoStake;
         } else {
-            (success, ) = payable(game.playerOne).call{value: game.playerOneStake}(""); 
-            require(success);
-            (success, ) = payable(game.playerTwo).call{value: game.playerTwoStake}(""); 
-            require(success);
+            claimable[game.playerOne] += game.playerOneStake;
+            claimable[game.playerTwo] += game.playerTwoStake;
         }
+    }
+
+    function claim() external {
+        uint256 claimableAmount = claimable[msg.sender];
+        delete claimable[msg.sender];
+        (bool success, ) = payable(msg.sender).call{value: claimableAmount}(""); 
+        require(success);
     }
 
     // If one player stops playing the other player may claim all of the stake
     function staleGameClaim(uint256 _gameId) external {
-        if(gameOver(_gameId)) revert GameOver();
+        if (gameOver(_gameId)) revert GameOver();
         Game memory game = games[_gameId];
         if (block.timestamp - game.lastMoveAt < 1 weeks) revert GameStillLive();
         delete games[_gameId];
@@ -118,6 +137,7 @@ contract TicTacToe {
 
     function startGame(address _playerTwo) external payable validateGame(_playerTwo) {
         require(msg.value >= MIN_STAKE, "lt MIN_STAKE");
+        require(msg.value <= MAX_STAKE, "gt MAX_STAKE");
         games[gameNonce].playerOne = msg.sender;
         games[gameNonce].playerTwo = _playerTwo;
         games[gameNonce].playerOneStake = msg.value;
@@ -141,9 +161,10 @@ contract TicTacToe {
             let row2 := add(row0, 0x40)
             let col0 := add(row0, 0x60)
             let col1 := add(row0, 0x80)
-            let col2 := add(row0, 0x100)
-            let d0 := add(row0, 0x120)
-            let d1 := add(row0, 0x140)
+            let col2 := add(row0, 0xa0)
+            let d0 := add(row0, 0xc0)
+            let d1 := add(row0, 0xe0)
+            mstore(0x40, add(row0, 0x160))
             // We employ the 3x3 magic square to determine the winner
             // https://en.wikipedia.org/wiki/Magic_square
             for { let i := 0 } lt(i, 0x9) { i := add(i, 0x1) } {
@@ -175,11 +196,11 @@ contract TicTacToe {
                 }
                 // Hidden in plain sight
                 if lt(i, 3) { mstore(col0, add(mload(col0), mul(squareValue, factor))) }
-                if and(gt(i, 2), lt(i, 6)) { mstore(col2, add(mload(col2), mul(squareValue, factor))) }
+                if and(gt(i, 2), lt(i, 6)) { mstore(col1, add(mload(col1), mul(squareValue, factor))) }
                 if gt(i, 5) { mstore(col2, add(mload(col2), mul(squareValue, factor))) }
             }
 
-            for { let i := 0 } lt(i, 0x160) { i := add(i, 0x20) } {
+            for { let i := 0 } lt(i, 0x100) { i := add(i, 0x20) } {
                 let value := mload(add(row0, i))
                 if and(not(iszero(value)), eq(smod(value, 15), 0)) {
                     switch iszero(and(value, shl(1, 255)))
