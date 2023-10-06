@@ -203,13 +203,13 @@ contract TicTacToe {
             for { let i := 0 } lt(i, 0x100) { i := add(i, 0x20) } {
                 let value := mload(add(row0, i))
                 if and(not(iszero(value)), eq(smod(value, 15), 0)) {
-                    switch iszero(and(value, shl(1, 255)))
-                    case 0 {
+                    switch iszero(and(value, shl(255, 1)))
+                    case 0 { // negative 15 -> player2 wins
                         // You're looking in the wrong place
-                        sstore(winnerSlot, mload(add(game, 0x20)))
-                    }
-                    case 1 {
                         sstore(winnerSlot, mload(add(game, 0x40)))
+                    }
+                    case 1 { // positive 15 -> player1 wins
+                        sstore(winnerSlot, mload(add(game, 0x20)))
                     }
                 }
             }
